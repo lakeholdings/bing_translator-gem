@@ -9,6 +9,9 @@ end
 describe BingTranslator do
   include RSpecHtmlMatchers
 
+    COGNITIVE_ACCESS_TOKEN_URI =
+      URI.parse('https://api.cognitive.microsoft.com/sts/v1.0/issueToken').freeze
+
   def load_file(filename)
     File.read(File.join(File.dirname(__FILE__), 'etc', filename))
   end
@@ -67,11 +70,53 @@ describe BingTranslator do
       expect(result).to eq message_en
     end
 
+    context 'when the authentication server is offline' do
+      it 'throws a reasonable error when a 500 error is encountered' do
+        stub_request(:any, COGNITIVE_ACCESS_TOKEN_URI).
+          to_return(status: [500, "Internal Server Error"])
+
+        expect { translator.translate 'hola', from: :es, to: :en }
+          .to raise_error(BingTranslator::Exception)
+        expect { translator.translate 'hola', from: :es, to: :en }
+          .to raise_error(BingTranslator::UnavailableException)
+      end
+
+      it 'throws a reasonable error with a different 5XX error' do
+        stub_request(:any, COGNITIVE_ACCESS_TOKEN_URI).
+          to_return(status: [503, "Service Unavailable"])
+
+        expect { translator.translate 'hola', from: :es, to: :en }
+          .to raise_error(BingTranslator::Exception)
+        expect { translator.translate 'hola', from: :es, to: :en }
+          .to raise_error(BingTranslator::UnavailableException)
+      end
+    end
+
     context 'when invalid language is specified' do
       it 'throws a reasonable error' do
         expect { translator.translate 'hola', from: :invlaid, to: :en }
           .to raise_error(BingTranslator::Exception)
+        expect { translator.translate 'hola', from: :invlaid, to: :en }
+          .to raise_error(BingTranslator::ApiException)
       end
+    end
+
+    context 'when no target language is specified' do
+      it 'throws a reasonable error' do
+        expect { translator.translate 'hola', from: :es }
+          .to raise_error(BingTranslator::Exception)
+        expect { translator.translate 'hola', from: :es }
+          .to raise_error(BingTranslator::UsageException)
+      end
+    end
+  end
+
+  describe '#speak' do
+    it 'will always throw an exception' do
+      expect { translator.speak 'hola', from: :es, to: :en }
+        .to raise_error(BingTranslator::Exception)
+      expect { translator.speak 'hola', from: :es, to: :en }
+        .to raise_error(BingTranslator::UsageException)
     end
   end
 
@@ -134,13 +179,15 @@ describe BingTranslator do
 
     subject { translator.translate 'hola', from: :es, to: :en }
 
-    it 'throws a BingTranslator::Exception exception' do
+    it 'throws a BingTranslator::AuthenticationException exception' do
       expect { subject }.to raise_error(BingTranslator::Exception)
+      expect { subject }.to raise_error(BingTranslator::AuthenticationException)
     end
 
     context 'trying to translate something twice' do
-      it 'throws the BingTranslator::Exception exception every time' do
+      it 'throws the BingTranslator::AuthenticationException exception every time' do
         2.times { expect { subject }.to raise_error(BingTranslator::Exception) }
+        2.times { expect { subject }.to raise_error(BingTranslator::AuthenticationException) }
       end
     end
   end
@@ -188,6 +235,7 @@ describe BingTranslator do
 
         it 'throws an error' do
           expect { subject }.to raise_error(BingTranslator::Exception)
+          expect { subject }.to raise_error(BingTranslator::ApiException)
         end
       end
 
