@@ -71,24 +71,50 @@ describe BingTranslator do
     end
 
     context 'when the authentication server is offline' do
+      # Use a new, non-cached translator so that we guarantee hitting the authentication server
+      let(:authenticating_translator) { described_class.new(api_key, skip_ssl_verify: false) }
+
       it 'throws a reasonable error when a 500 error is encountered' do
         stub_request(:any, COGNITIVE_ACCESS_TOKEN_URI).
-          to_return(status: [500, "Internal Server Error"])
+          to_return(status: [500, 'Internal Server Error'])
 
-        expect { translator.translate 'hola', from: :es, to: :en }
+        expect { authenticating_translator.translate 'hola', from: :es, to: :en }
           .to raise_error(BingTranslator::Exception)
-        expect { translator.translate 'hola', from: :es, to: :en }
-          .to raise_error(BingTranslator::UnavailableException)
+        expect { authenticating_translator.translate 'hola', from: :es, to: :en }
+          .to raise_error(BingTranslator::UnavailableException, '500: Credentials server unavailable')
       end
 
       it 'throws a reasonable error with a different 5XX error' do
         stub_request(:any, COGNITIVE_ACCESS_TOKEN_URI).
-          to_return(status: [503, "Service Unavailable"])
+          to_return(status: [503, 'Service Unavailable'])
 
-        expect { translator.translate 'hola', from: :es, to: :en }
+        expect { authenticating_translator.translate 'hola', from: :es, to: :en }
           .to raise_error(BingTranslator::Exception)
-        expect { translator.translate 'hola', from: :es, to: :en }
-          .to raise_error(BingTranslator::UnavailableException)
+        expect { authenticating_translator.translate 'hola', from: :es, to: :en }
+          .to raise_error(BingTranslator::UnavailableException, '503: Credentials server unavailable')
+      end
+    end
+
+    context 'when the authentication server is online' do
+      it 'throws an AuthenticationException if the authentication key is invalid' do
+        fake_api_key = '32'
+        authenticating_translator = BingTranslator.new(fake_api_key, skip_ssl_verify: false)
+
+        expect { authenticating_translator.translate 'hola', from: :es, to: :en }
+          .to raise_error(BingTranslator::Exception)
+        expect { authenticating_translator.translate 'hola', from: :es, to: :en }
+          .to raise_error(BingTranslator::AuthenticationException, "Unsuccessful Access Token call: Code: 401 (Invalid credentials?)")
+      end
+
+      it 'throws an AuthenticationException if HTTP response code is not 200 or 5XX' do
+        authenticating_translator = BingTranslator.new(api_key, skip_ssl_verify: false)
+        stub_request(:any, COGNITIVE_ACCESS_TOKEN_URI).
+          to_return(status: [404, 'Not Found'])
+
+        expect { authenticating_translator.translate 'hola', from: :es, to: :en }
+          .to raise_error(BingTranslator::Exception)
+        expect { authenticating_translator.translate 'hola', from: :es, to: :en }
+          .to raise_error(BingTranslator::AuthenticationException, "Unsuccessful Access Token call: Code: 404 (Invalid credentials?)")
       end
     end
 
