@@ -84,7 +84,8 @@ class BingTranslator
 
     def request_new_access_token
       headers = {
-        'Ocp-Apim-Subscription-Key' => @subscription_key
+        'Ocp-Apim-Subscription-Key' => @subscription_key,
+        'Ocp-Apim-Subscription-Region' => 'eastus'
       }
 
       http = Net::HTTP.new(COGNITIVE_ACCESS_TOKEN_URI.host, COGNITIVE_ACCESS_TOKEN_URI.port)
